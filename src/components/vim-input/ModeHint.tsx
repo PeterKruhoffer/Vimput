@@ -14,8 +14,8 @@ export function ModeHint({ mode }: ModeHintProps) {
   return (
     <p className="text-xs text-zinc-300">
       Normal mode: use h/l to move, j/k to move vertically in multiline, w/b to
-      jump by word, and e to jump to word end. Press i or a to return to insert
-      mode.
+      jump by word, and e to jump to word end. Delete with dw, db, diw, and ciw.
+      Press i or a to return to insert mode.
     </p>
   );
 }

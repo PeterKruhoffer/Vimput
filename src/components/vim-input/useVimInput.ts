@@ -17,6 +17,15 @@ type VisualCursorLayout = {
   rows: VisualCursorRow[];
   lineHeight: number;
 };
+type WordRange = {
+  start: number;
+  end: number;
+};
+type PendingOperator = "d" | "c";
+type PendingCommandState = {
+  operator: PendingOperator;
+  awaiting: "motion" | "inner-object";
+};
 
 const LEFT_MOTION = new Set(["h"]);
 const RIGHT_MOTION = new Set(["l"]);
@@ -91,6 +100,55 @@ function findWordEndForward(value: string, cursor: number) {
   }
 
   return index;
+}
+
+function findWordRangeNearCursor(
+  value: string,
+  cursor: number,
+): WordRange | null {
+  if (value.length === 0) {
+    return null;
+  }
+
+  let index = clamp(cursor, 0, value.length);
+
+  if (index === value.length) {
+    index = value.length - 1;
+  }
+
+  if (!isWordChar(value[index])) {
+    if (index > 0 && isWordChar(value[index - 1])) {
+      index -= 1;
+    } else {
+      const nextWordStart = findNextWordStart(value, index);
+      if (nextWordStart < value.length && isWordChar(value[nextWordStart])) {
+        index = nextWordStart;
+      } else {
+        const previousWordStart = findPreviousWordStart(value, index);
+        if (!isWordChar(value[previousWordStart])) {
+          return null;
+        }
+
+        index = previousWordStart;
+      }
+    }
+  }
+
+  if (!isWordChar(value[index])) {
+    return null;
+  }
+
+  let start = index;
+  while (start > 0 && isWordChar(value[start - 1])) {
+    start -= 1;
+  }
+
+  let end = index + 1;
+  while (end < value.length && isWordChar(value[end])) {
+    end += 1;
+  }
+
+  return { start, end };
 }
 
 function findLineStart(value: string, cursor: number) {
@@ -393,6 +451,7 @@ export function useVimInput<
 >() {
   const inputRef = useRef<TElement | null>(null);
   const preferredVisualLeftRef = useRef<number | null>(null);
+  const pendingCommandRef = useRef<PendingCommandState | null>(null);
   const [mode, setMode] = useState<VimMode>("normal");
 
   const moveCaretBy = useCallback((delta: number) => {
@@ -510,8 +569,70 @@ export function useVimInput<
     }
   }, []);
 
+  const applyDeletion = useCallback((start: number, end: number) => {
+    const input = inputRef.current;
+
+    if (!input) {
+      return null;
+    }
+
+    const clampedStart = clamp(start, 0, input.value.length);
+    const clampedEnd = clamp(end, clampedStart, input.value.length);
+
+    if (clampedEnd <= clampedStart) {
+      return null;
+    }
+
+    input.value = `${input.value.slice(0, clampedStart)}${input.value.slice(clampedEnd)}`;
+    input.setSelectionRange(clampedStart, clampedStart);
+    preferredVisualLeftRef.current = null;
+    return clampedStart;
+  }, []);
+
+  const deleteToNextWord = useCallback(() => {
+    const input = inputRef.current;
+
+    if (!input) {
+      return null;
+    }
+
+    const cursor = input.selectionStart ?? 0;
+    const nextCursor = findNextWordStart(input.value, cursor);
+    return applyDeletion(cursor, nextCursor);
+  }, [applyDeletion]);
+
+  const deleteToPreviousWord = useCallback(() => {
+    const input = inputRef.current;
+
+    if (!input) {
+      return null;
+    }
+
+    const cursor = input.selectionStart ?? 0;
+    const previousCursor = findPreviousWordStart(input.value, cursor);
+    return applyDeletion(previousCursor, cursor);
+  }, [applyDeletion]);
+
+  const deleteInnerWord = useCallback(() => {
+    const input = inputRef.current;
+
+    if (!input) {
+      return null;
+    }
+
+    const cursor = input.selectionStart ?? 0;
+    const wordRange = findWordRangeNearCursor(input.value, cursor);
+
+    if (!wordRange) {
+      return null;
+    }
+
+    return applyDeletion(wordRange.start, wordRange.end);
+  }, [applyDeletion]);
+
   const onFocus = useCallback(() => {
     const input = inputRef.current;
+    pendingCommandRef.current = null;
 
     if (input?.value.length === 0) {
       setMode("insert");
@@ -540,6 +661,7 @@ export function useVimInput<
 
           setMode("normal");
           preferredVisualLeftRef.current = null;
+          pendingCommandRef.current = null;
         }
 
         return;
@@ -550,9 +672,57 @@ export function useVimInput<
         return;
       }
 
+      if (key === "escape") {
+        if (pendingCommandRef.current) {
+          event.preventDefault();
+          pendingCommandRef.current = null;
+          preferredVisualLeftRef.current = null;
+        }
+        return;
+      }
+
+      const pendingCommand = pendingCommandRef.current;
+      if (pendingCommand) {
+        event.preventDefault();
+
+        if (pendingCommand.awaiting === "motion") {
+          if (key === "i") {
+            pendingCommandRef.current = {
+              operator: pendingCommand.operator,
+              awaiting: "inner-object",
+            };
+            preferredVisualLeftRef.current = null;
+            return;
+          }
+
+          if (pendingCommand.operator === "d" && key === "w") {
+            deleteToNextWord();
+          } else if (pendingCommand.operator === "d" && key === "b") {
+            deleteToPreviousWord();
+          }
+
+          pendingCommandRef.current = null;
+          preferredVisualLeftRef.current = null;
+          return;
+        }
+
+        if (key === "w") {
+          const deletedAt = deleteInnerWord();
+
+          if (pendingCommand.operator === "c" && deletedAt !== null) {
+            setMode("insert");
+          }
+        }
+
+        pendingCommandRef.current = null;
+        preferredVisualLeftRef.current = null;
+        return;
+      }
+
       if (key === "i") {
         event.preventDefault();
         setMode("insert");
+        pendingCommandRef.current = null;
         preferredVisualLeftRef.current = null;
         return;
       }
@@ -561,6 +731,17 @@ export function useVimInput<
         event.preventDefault();
         moveCaretBy(1);
         setMode("insert");
+        pendingCommandRef.current = null;
+        preferredVisualLeftRef.current = null;
+        return;
+      }
+
+      if (key === "d" || key === "c") {
+        event.preventDefault();
+        pendingCommandRef.current = {
+          operator: key,
+          awaiting: "motion",
+        };
         preferredVisualLeftRef.current = null;
         return;
       }
@@ -621,10 +802,14 @@ export function useVimInput<
 
       if (key.length === 1 || key === "backspace" || key === "delete") {
         event.preventDefault();
+        pendingCommandRef.current = null;
         preferredVisualLeftRef.current = null;
       }
     },
     [
+      deleteInnerWord,
+      deleteToNextWord,
+      deleteToPreviousWord,
       mode,
       moveCaretBy,
       moveCaretVertically,

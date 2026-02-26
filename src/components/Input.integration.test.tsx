@@ -55,6 +55,45 @@ describe("Input integration", () => {
     expect(input.selectionStart).toBe(0);
   });
 
+  it("supports word deletion commands dw/db/diw/ciw", () => {
+    const input = setupInput();
+    input.focus();
+
+    input.value = "alpha beta gamma";
+    input.setSelectionRange(0, 0);
+    fireEvent.keyDown(input, { key: "d" });
+    fireEvent.keyDown(input, { key: "w" });
+    expect(input.value).toBe("beta gamma");
+    expect(input.selectionStart).toBe(0);
+    expect(screen.getByText("normal")).toBeTruthy();
+
+    input.value = "alpha beta gamma";
+    input.setSelectionRange(11, 11);
+    fireEvent.keyDown(input, { key: "d" });
+    fireEvent.keyDown(input, { key: "b" });
+    expect(input.value).toBe("alpha gamma");
+    expect(input.selectionStart).toBe(6);
+    expect(screen.getByText("normal")).toBeTruthy();
+
+    input.value = "one two three";
+    input.setSelectionRange(5, 5);
+    fireEvent.keyDown(input, { key: "d" });
+    fireEvent.keyDown(input, { key: "i" });
+    fireEvent.keyDown(input, { key: "w" });
+    expect(input.value).toBe("one  three");
+    expect(input.selectionStart).toBe(4);
+    expect(screen.getByText("normal")).toBeTruthy();
+
+    input.value = "one  three";
+    input.setSelectionRange(6, 6);
+    fireEvent.keyDown(input, { key: "c" });
+    fireEvent.keyDown(input, { key: "i" });
+    fireEvent.keyDown(input, { key: "w" });
+    expect(input.value).toBe("one  ");
+    expect(input.selectionStart).toBe(5);
+    expect(screen.getByText("insert")).toBeTruthy();
+  });
+
   it("starts in insert mode on empty focus and blocks plain typing in normal mode", () => {
     const input = setupInput();
     fireEvent.focus(input);
