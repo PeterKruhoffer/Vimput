@@ -73,12 +73,42 @@ describe("Input integration", () => {
     expect(screen.getByText("normal")).toBeTruthy();
 
     const normalEvent = new KeyboardEvent("keydown", {
-      key: "a",
+      key: "x",
       bubbles: true,
       cancelable: true,
     });
     input.dispatchEvent(normalEvent);
     expect(normalEvent.defaultPrevented).toBe(true);
+  });
+
+  it("uses a to append and switch to insert mode from normal mode", () => {
+    const input = setupInput();
+    input.value = "alpha";
+    input.focus();
+    input.setSelectionRange(1, 1);
+
+    const appendHandled = fireEvent.keyDown(input, { key: "a" });
+    expect(appendHandled).toBe(false);
+    expect(input.selectionStart).toBe(2);
+    expect(screen.getByText("insert")).toBeTruthy();
+  });
+
+  it("moves the cursor left on escape and keeps i as insert-before-current-char", () => {
+    const input = setupInput();
+    input.value = "alpha";
+    input.focus();
+    input.setSelectionRange(5, 5);
+
+    fireEvent.keyDown(input, { key: "i" });
+    expect(screen.getByText("insert")).toBeTruthy();
+
+    fireEvent.keyDown(input, { key: "Escape" });
+    expect(screen.getByText("normal")).toBeTruthy();
+    expect(input.selectionStart).toBe(4);
+
+    fireEvent.keyDown(input, { key: "i" });
+    expect(screen.getByText("insert")).toBeTruthy();
+    expect(input.selectionStart).toBe(4);
   });
 
   it("keeps Ctrl/Cmd shortcuts available in normal mode", () => {

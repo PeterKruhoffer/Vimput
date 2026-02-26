@@ -151,4 +151,34 @@ describe("MultilineInput integration", () => {
     textarea.dispatchEvent(metaPasteEvent);
     expect(metaPasteEvent.defaultPrevented).toBe(false);
   });
+
+  it("uses a to append and switch to insert mode from normal mode", () => {
+    const textarea = setupMultilineInput();
+    textarea.value = "line one\nline two";
+    textarea.focus();
+    textarea.setSelectionRange(2, 2);
+
+    const appendHandled = fireEvent.keyDown(textarea, { key: "a" });
+    expect(appendHandled).toBe(false);
+    expect(textarea.selectionStart).toBe(3);
+    expect(screen.getByText("insert")).toBeTruthy();
+  });
+
+  it("moves the cursor left on escape and keeps i as insert-before-current-char", () => {
+    const textarea = setupMultilineInput();
+    textarea.value = "line one\nline two";
+    textarea.focus();
+    textarea.setSelectionRange(8, 8);
+
+    fireEvent.keyDown(textarea, { key: "i" });
+    expect(screen.getByText("insert")).toBeTruthy();
+
+    fireEvent.keyDown(textarea, { key: "Escape" });
+    expect(screen.getByText("normal")).toBeTruthy();
+    expect(textarea.selectionStart).toBe(7);
+
+    fireEvent.keyDown(textarea, { key: "i" });
+    expect(screen.getByText("insert")).toBeTruthy();
+    expect(textarea.selectionStart).toBe(7);
+  });
 });

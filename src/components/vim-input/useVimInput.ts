@@ -525,10 +525,28 @@ export function useVimInput<
       if (mode === "insert") {
         if (key === "escape") {
           event.preventDefault();
+          const input = inputRef.current;
+
+          if (input) {
+            const selectionStart = input.selectionStart ?? 0;
+            const selectionEnd = input.selectionEnd ?? selectionStart;
+            const normalCursor =
+              selectionStart === selectionEnd
+                ? clamp(selectionStart - 1, 0, input.value.length)
+                : selectionStart;
+
+            input.setSelectionRange(normalCursor, normalCursor);
+          }
+
           setMode("normal");
           preferredVisualLeftRef.current = null;
         }
 
+        return;
+      }
+
+      // Preserve browser/system shortcuts in normal mode (e.g. paste/copy).
+      if (event.metaKey || event.ctrlKey || event.altKey) {
         return;
       }
 
@@ -539,8 +557,11 @@ export function useVimInput<
         return;
       }
 
-      // Preserve browser/system shortcuts in normal mode (e.g. paste/copy).
-      if (event.metaKey || event.ctrlKey || event.altKey) {
+      if (key === "a") {
+        event.preventDefault();
+        moveCaretBy(1);
+        setMode("insert");
+        preferredVisualLeftRef.current = null;
         return;
       }
 
