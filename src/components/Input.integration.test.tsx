@@ -150,6 +150,26 @@ describe("Input integration", () => {
     expect(input.selectionStart).toBe(4);
   });
 
+  it("enters visual line mode with Shift+V and moves selection by character", () => {
+    const input = setupInput();
+    input.value = "alpha beta";
+    input.focus();
+    input.setSelectionRange(4, 4);
+
+    fireEvent.keyDown(input, { key: "V", shiftKey: true });
+    expect(screen.getByText("visual line")).toBeTruthy();
+    expect(input.selectionStart).toBe(0);
+    expect(input.selectionEnd).toBe(10);
+
+    fireEvent.keyDown(input, { key: "h" });
+    expect(input.selectionStart).toBe(0);
+    expect(input.selectionEnd).toBe(9);
+
+    fireEvent.keyDown(input, { key: "j" });
+    expect(input.selectionStart).toBe(0);
+    expect(input.selectionEnd).toBe(10);
+  });
+
   it("keeps Ctrl/Cmd shortcuts available in normal mode", () => {
     const input = setupInput();
     input.value = "seed value";

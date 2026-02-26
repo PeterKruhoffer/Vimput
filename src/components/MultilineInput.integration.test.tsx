@@ -181,4 +181,54 @@ describe("MultilineInput integration", () => {
     expect(screen.getByText("insert")).toBeTruthy();
     expect(textarea.selectionStart).toBe(7);
   });
+
+  it("enters visual line mode with Shift+V and moves selection by character", () => {
+    const textarea = setupMultilineInput();
+    textarea.value = "alpha\nbeta\ngamma";
+    textarea.focus();
+    textarea.setSelectionRange(7, 7);
+
+    fireEvent.keyDown(textarea, { key: "V", shiftKey: true });
+    expect(screen.getByText("visual line")).toBeTruthy();
+    expect(textarea.selectionStart).toBe(6);
+    expect(textarea.selectionEnd).toBe(10);
+
+    fireEvent.keyDown(textarea, { key: "h" });
+    expect(textarea.selectionStart).toBe(6);
+    expect(textarea.selectionEnd).toBe(9);
+
+    fireEvent.keyDown(textarea, { key: "l" });
+    expect(textarea.selectionStart).toBe(6);
+    expect(textarea.selectionEnd).toBe(10);
+
+    fireEvent.keyDown(textarea, { key: "j" });
+    expect(textarea.selectionStart).toBe(6);
+    expect(textarea.selectionEnd).toBe(11);
+
+    fireEvent.keyDown(textarea, { key: "k" });
+    expect(textarea.selectionStart).toBe(6);
+    expect(textarea.selectionEnd).toBe(10);
+  });
+
+  it("moves the selected line down/up with Shift+J/Shift+K in visual line mode", () => {
+    const textarea = setupMultilineInput();
+    textarea.value = "alpha\nbeta\ngamma";
+    textarea.focus();
+    textarea.setSelectionRange(7, 7);
+
+    fireEvent.keyDown(textarea, { key: "V", shiftKey: true });
+    fireEvent.keyDown(textarea, { key: "J", shiftKey: true });
+
+    expect(textarea.value).toBe("alpha\ngamma\nbeta");
+    expect(textarea.selectionStart).toBe(12);
+    expect(textarea.selectionEnd).toBe(16);
+    expect(screen.getByText("visual line")).toBeTruthy();
+
+    fireEvent.keyDown(textarea, { key: "K", shiftKey: true });
+
+    expect(textarea.value).toBe("alpha\nbeta\ngamma");
+    expect(textarea.selectionStart).toBe(6);
+    expect(textarea.selectionEnd).toBe(10);
+    expect(screen.getByText("visual line")).toBeTruthy();
+  });
 });

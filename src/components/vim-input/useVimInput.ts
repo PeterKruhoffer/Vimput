@@ -446,12 +446,113 @@ function isTextArea(input: TextInputElement) {
   return input instanceof HTMLTextAreaElement;
 }
 
+type LineMoveDirection = "up" | "down";
+type SelectionEdges = {
+  anchor: number;
+  active: number;
+};
+
+function resolveSelectionEdges(
+  input: TextInputElement,
+  selection?: SelectionEdges | null,
+) {
+  const fallbackStart = input.selectionStart ?? 0;
+  const fallbackEnd = input.selectionEnd ?? fallbackStart;
+  const nextAnchor = selection?.anchor ?? fallbackStart;
+  const nextActive = selection?.active ?? fallbackEnd;
+
+  return {
+    anchor: clamp(nextAnchor, 0, input.value.length),
+    active: clamp(nextActive, 0, input.value.length),
+  };
+}
+
+function applySelectionEdges(
+  input: TextInputElement,
+  selection: SelectionEdges,
+) {
+  const start = Math.min(selection.anchor, selection.active);
+  const end = Math.max(selection.anchor, selection.active);
+  input.setSelectionRange(start, end);
+}
+
+function selectCurrentLine(input: TextInputElement) {
+  const cursor = input.selectionStart ?? 0;
+  const lineStart = findLineStart(input.value, cursor);
+  const lineEnd = findLineEnd(input.value, lineStart);
+  const selection = { anchor: lineStart, active: lineEnd };
+
+  applySelectionEdges(input, selection);
+  return selection;
+}
+
+function buildLineStarts(lines: string[]) {
+  const starts: number[] = [];
+  let currentStart = 0;
+
+  for (let index = 0; index < lines.length; index += 1) {
+    starts.push(currentStart);
+    currentStart += (lines[index]?.length ?? 0) + 1;
+  }
+
+  return starts;
+}
+
+function moveSelectedLinesByOne(
+  input: TextInputElement,
+  direction: LineMoveDirection,
+  selection: SelectionEdges,
+) {
+  const value = input.value;
+
+  if (value.length === 0 || !value.includes("\n")) {
+    return null;
+  }
+
+  const selectedStart = Math.min(selection.anchor, selection.active);
+  const selectedEnd = Math.max(selection.anchor, selection.active);
+  const startLineIndex = countLinesBeforeCursor(value, selectedStart);
+  const endReferenceCursor =
+    selectedEnd > selectedStart ? selectedEnd - 1 : selectedStart;
+  const endLineIndex = countLinesBeforeCursor(value, endReferenceCursor);
+  const lines = value.split("\n");
+
+  if (direction === "up" && startLineIndex === 0) {
+    return null;
+  }
+
+  if (direction === "down" && endLineIndex >= lines.length - 1) {
+    return null;
+  }
+
+  const selectedLineCount = endLineIndex - startLineIndex + 1;
+  const movingLines = lines.splice(startLineIndex, selectedLineCount);
+  const insertAt = direction === "up" ? startLineIndex - 1 : startLineIndex + 1;
+
+  lines.splice(insertAt, 0, ...movingLines);
+  input.value = lines.join("\n");
+
+  const movedStartLine =
+    direction === "up" ? startLineIndex - 1 : startLineIndex + 1;
+  const movedEndLine = movedStartLine + selectedLineCount - 1;
+  const lineStarts = buildLineStarts(lines);
+  const anchor = lineStarts[movedStartLine] ?? 0;
+  const active =
+    (lineStarts[movedEndLine] ?? 0) + (lines[movedEndLine]?.length ?? 0);
+
+  return {
+    anchor,
+    active,
+  };
+}
+
 export function useVimInput<
   TElement extends TextInputElement = HTMLInputElement,
 >() {
   const inputRef = useRef<TElement | null>(null);
   const preferredVisualLeftRef = useRef<number | null>(null);
   const pendingCommandRef = useRef<PendingCommandState | null>(null);
+  const visualSelectionRef = useRef<SelectionEdges | null>(null);
   const [mode, setMode] = useState<VimMode>("normal");
 
   const moveCaretBy = useCallback((delta: number) => {
@@ -630,9 +731,87 @@ export function useVimInput<
     return applyDeletion(wordRange.start, wordRange.end);
   }, [applyDeletion]);
 
+  const enterVisualLineMode = useCallback(() => {
+    const input = inputRef.current;
+
+    if (!input) {
+      return;
+    }
+
+    const selection = selectCurrentLine(input);
+    visualSelectionRef.current = selection;
+    setMode("visual-line");
+    pendingCommandRef.current = null;
+    preferredVisualLeftRef.current = null;
+  }, []);
+
+  const moveVisualSelectionBy = useCallback((delta: number) => {
+    const input = inputRef.current;
+
+    if (!input) {
+      return;
+    }
+
+    const currentSelection = resolveSelectionEdges(
+      input,
+      visualSelectionRef.current,
+    );
+    const nextSelection = {
+      anchor: currentSelection.anchor,
+      active: clamp(currentSelection.active + delta, 0, input.value.length),
+    };
+
+    applySelectionEdges(input, nextSelection);
+    visualSelectionRef.current = nextSelection;
+    preferredVisualLeftRef.current = null;
+  }, []);
+
+  const moveVisualLinesBy = useCallback((direction: LineMoveDirection) => {
+    const input = inputRef.current;
+
+    if (!input) {
+      return;
+    }
+
+    const currentSelection = resolveSelectionEdges(
+      input,
+      visualSelectionRef.current,
+    );
+    const movedSelection = moveSelectedLinesByOne(
+      input,
+      direction,
+      currentSelection,
+    );
+
+    if (!movedSelection) {
+      return;
+    }
+
+    applySelectionEdges(input, movedSelection);
+    visualSelectionRef.current = movedSelection;
+    preferredVisualLeftRef.current = null;
+  }, []);
+
+  const exitVisualLineMode = useCallback(() => {
+    const input = inputRef.current;
+    const currentSelection = input
+      ? resolveSelectionEdges(input, visualSelectionRef.current)
+      : null;
+
+    if (input && currentSelection) {
+      input.setSelectionRange(currentSelection.active, currentSelection.active);
+    }
+
+    setMode("normal");
+    visualSelectionRef.current = null;
+    pendingCommandRef.current = null;
+    preferredVisualLeftRef.current = null;
+  }, []);
+
   const onFocus = useCallback(() => {
     const input = inputRef.current;
     pendingCommandRef.current = null;
+    visualSelectionRef.current = null;
 
     if (input?.value.length === 0) {
       setMode("insert");
@@ -662,13 +841,52 @@ export function useVimInput<
           setMode("normal");
           preferredVisualLeftRef.current = null;
           pendingCommandRef.current = null;
+          visualSelectionRef.current = null;
         }
 
         return;
       }
 
-      // Preserve browser/system shortcuts in normal mode (e.g. paste/copy).
+      // Preserve browser/system shortcuts in normal/visual-line mode.
       if (event.metaKey || event.ctrlKey || event.altKey) {
+        return;
+      }
+
+      if (mode === "visual-line") {
+        if (key === "escape") {
+          event.preventDefault();
+          exitVisualLineMode();
+          return;
+        }
+
+        if (event.shiftKey && key === DOWN_MOTION) {
+          event.preventDefault();
+          moveVisualLinesBy("down");
+          return;
+        }
+
+        if (event.shiftKey && key === UP_MOTION) {
+          event.preventDefault();
+          moveVisualLinesBy("up");
+          return;
+        }
+
+        if (LEFT_MOTION.has(key) || key === UP_MOTION) {
+          event.preventDefault();
+          moveVisualSelectionBy(-1);
+          return;
+        }
+
+        if (RIGHT_MOTION.has(key) || key === DOWN_MOTION) {
+          event.preventDefault();
+          moveVisualSelectionBy(1);
+          return;
+        }
+
+        if (key.length === 1 || key === "backspace" || key === "delete") {
+          event.preventDefault();
+        }
+
         return;
       }
 
@@ -716,6 +934,12 @@ export function useVimInput<
 
         pendingCommandRef.current = null;
         preferredVisualLeftRef.current = null;
+        return;
+      }
+
+      if (event.shiftKey && key === "v") {
+        event.preventDefault();
+        enterVisualLineMode();
         return;
       }
 
@@ -810,12 +1034,16 @@ export function useVimInput<
       deleteInnerWord,
       deleteToNextWord,
       deleteToPreviousWord,
+      enterVisualLineMode,
+      exitVisualLineMode,
       mode,
       moveCaretBy,
       moveCaretVertically,
       moveToNextWord,
       moveToPreviousWord,
       moveToWordEnd,
+      moveVisualLinesBy,
+      moveVisualSelectionBy,
     ],
   );
 

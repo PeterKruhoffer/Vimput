@@ -11,11 +11,22 @@ export function ModeHint({ mode }: ModeHintProps) {
     );
   }
 
+  if (mode === "visual-line") {
+    return (
+      <p className="text-xs text-zinc-300">
+        Visual line mode: Shift+J/Shift+K move selected lines down/up. Use h, j,
+        k, and l to adjust the selection by one character. Press Esc to return
+        to normal mode.
+      </p>
+    );
+  }
+
   return (
     <p className="text-xs text-zinc-300">
       Normal mode: use h/l to move, j/k to move vertically in multiline, w/b to
-      jump by word, and e to jump to word end. Delete with dw, db, diw, and ciw.
-      Press i or a to return to insert mode.
+      jump by word, and e to jump to word end. Press Shift+V for visual line
+      mode. Delete with dw, db, diw, and ciw. Press i or a to return to insert
+      mode.
     </p>
   );
 }
