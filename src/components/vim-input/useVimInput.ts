@@ -48,6 +48,32 @@ function findPreviousWordStart(value: string, cursor: number) {
 	return index;
 }
 
+function findWordEndForward(value: string, cursor: number) {
+	let index = clamp(cursor, 0, value.length);
+
+	if (index >= value.length) {
+		return value.length;
+	}
+
+	if (isWordChar(value[index])) {
+		while (index < value.length && isWordChar(value[index])) {
+			index += 1;
+		}
+
+		return index;
+	}
+
+	while (index < value.length && !isWordChar(value[index])) {
+		index += 1;
+	}
+
+	while (index < value.length && isWordChar(value[index])) {
+		index += 1;
+	}
+
+	return index;
+}
+
 export function useVimInput() {
 	const inputRef = useRef<HTMLInputElement>(null);
 	const [mode, setMode] = useState<VimMode>("normal");
@@ -89,6 +115,19 @@ export function useVimInput() {
 		const previousCursor = findPreviousWordStart(input.value, cursor);
 
 		input.setSelectionRange(previousCursor, previousCursor);
+	}, []);
+
+	const moveToWordEnd = useCallback(() => {
+		const input = inputRef.current;
+
+		if (!input) {
+			return;
+		}
+
+		const cursor = input.selectionStart ?? 0;
+		const wordEndCursor = findWordEndForward(input.value, cursor);
+
+		input.setSelectionRange(wordEndCursor, wordEndCursor);
 	}, []);
 
 	const onFocus = useCallback(() => {
@@ -142,11 +181,17 @@ export function useVimInput() {
 				return;
 			}
 
+			if (key === "e") {
+				event.preventDefault();
+				moveToWordEnd();
+				return;
+			}
+
 			if (key.length === 1 || key === "backspace" || key === "delete") {
 				event.preventDefault();
 			}
 		},
-		[mode, moveCaretBy, moveToNextWord, moveToPreviousWord],
+		[mode, moveCaretBy, moveToNextWord, moveToPreviousWord, moveToWordEnd],
 	);
 
 	return {

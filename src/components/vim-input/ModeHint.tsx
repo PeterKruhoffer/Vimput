@@ -13,8 +13,8 @@ export function ModeHint({ mode }: ModeHintProps) {
 
 	return (
 		<p className="text-xs text-zinc-300">
-			Normal mode: use h/j/k/l to move or w/b to jump by word. Press i to return
-			to insert mode.
+			Normal mode: use h/j/k/l to move, w/b to jump by word, and e to jump to
+			word end. Press i to return to insert mode.
 		</p>
 	);
 }
