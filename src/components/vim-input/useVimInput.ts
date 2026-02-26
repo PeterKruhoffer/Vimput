@@ -128,6 +128,86 @@ function findNextLineCursor(value: string, cursor: number) {
 	return nextLineStart + Math.min(column, nextLineLength);
 }
 
+function countLinesBeforeCursor(value: string, cursor: number) {
+	let lineCount = 0;
+	const clampedCursor = clamp(cursor, 0, value.length);
+
+	for (let index = 0; index < clampedCursor; index += 1) {
+		if (value[index] === "\n") {
+			lineCount += 1;
+		}
+	}
+
+	return lineCount;
+}
+
+function resolveLineHeight(input: HTMLTextAreaElement) {
+	const computedStyle = window.getComputedStyle(input);
+	const parsedLineHeight = Number.parseFloat(computedStyle.lineHeight);
+
+	if (Number.isFinite(parsedLineHeight)) {
+		return parsedLineHeight;
+	}
+
+	const parsedFontSize = Number.parseFloat(computedStyle.fontSize);
+	return Number.isFinite(parsedFontSize) ? parsedFontSize * 1.2 : 16;
+}
+
+function resolvePixelValue(value: string) {
+	const parsedValue = Number.parseFloat(value);
+	return Number.isFinite(parsedValue) ? parsedValue : 0;
+}
+
+function keepTextAreaCursorVisible(
+	input: HTMLTextAreaElement,
+	cursor: number,
+	direction: "up" | "down",
+	hasMoved: boolean,
+) {
+	const computedStyle = window.getComputedStyle(input);
+	const lineHeight = resolveLineHeight(input);
+	const paddingTop = resolvePixelValue(computedStyle.paddingTop);
+	const lineIndex = countLinesBeforeCursor(input.value, cursor);
+	const lineTop = paddingTop + lineIndex * lineHeight;
+	const lineBottom = lineTop + lineHeight;
+	const visibilityBuffer = lineHeight;
+	const viewportTop = input.scrollTop + visibilityBuffer;
+	const viewportBottom =
+		input.scrollTop + input.clientHeight - visibilityBuffer;
+	const maxScrollTop = Math.max(input.scrollHeight - input.clientHeight, 0);
+	const hasLogicalMultiline = input.value.includes("\n");
+
+	if (hasLogicalMultiline && !hasMoved) {
+		if (direction === "down") {
+			input.scrollTop = maxScrollTop;
+			return;
+		}
+
+		input.scrollTop = 0;
+		return;
+	}
+
+	if (lineTop < viewportTop) {
+		input.scrollTop = Math.max(lineTop - visibilityBuffer, 0);
+		return;
+	}
+
+	if (lineBottom > viewportBottom) {
+		input.scrollTop = Math.min(
+			lineBottom + visibilityBuffer - input.clientHeight,
+			maxScrollTop,
+		);
+	}
+
+	if (
+		hasLogicalMultiline &&
+		direction === "down" &&
+		cursor === input.value.length
+	) {
+		input.scrollTop = maxScrollTop;
+	}
+}
+
 function isTextArea(input: TextInputElement) {
 	return input instanceof HTMLTextAreaElement;
 }
@@ -202,8 +282,13 @@ export function useVimInput<
 			direction === "up"
 				? findPreviousLineCursor(input.value, cursor)
 				: findNextLineCursor(input.value, cursor);
+		const hasLogicalMultiline = input.value.includes("\n");
+		const hasMoved = nextCursor !== cursor;
 
 		input.setSelectionRange(nextCursor, nextCursor);
+		if (hasMoved || hasLogicalMultiline) {
+			keepTextAreaCursorVisible(input, nextCursor, direction, hasMoved);
+		}
 	}, []);
 
 	const onFocus = useCallback(() => {
@@ -230,6 +315,11 @@ export function useVimInput<
 			if (key === "i") {
 				event.preventDefault();
 				setMode("insert");
+				return;
+			}
+
+			// Preserve browser/system shortcuts in normal mode (e.g. paste/copy).
+			if (event.metaKey || event.ctrlKey || event.altKey) {
 				return;
 			}
 
