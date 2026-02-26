@@ -7,7 +7,8 @@ export function Input() {
 
   return (
     <div className="mx-auto mt-6 flex w-full max-w-2xl flex-col gap-3">
-      <div className="flex items-center gap-3 rounded-lg border border-zinc-200/20 bg-zinc-950/40 p-3">
+      <div className="flex flex-col items-end gap-3 rounded-lg border-2 border-zinc-200/20 bg-zinc-950/40 p-3">
+        <ModeBadge mode={mode} />
         <input
           ref={inputRef}
           type="text"
@@ -18,7 +19,6 @@ export function Input() {
           spellCheck={false}
           aria-label="Vim motion input"
         />
-        <ModeBadge mode={mode} />
       </div>
       <ModeHint mode={mode} />
     </div>

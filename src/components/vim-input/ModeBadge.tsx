@@ -15,7 +15,7 @@ export function ModeBadge({ mode }: ModeBadgeProps) {
 
   return (
     <span
-      className={`rounded px-2 py-1 text-xs uppercase tracking-wider border ${STYLES_BY_MODE[mode]}`}
+      className={`rounded px-2 py-1 text-sm uppercase tracking-wider border ${STYLES_BY_MODE[mode]}`}
       aria-live="polite"
     >
       {label}
