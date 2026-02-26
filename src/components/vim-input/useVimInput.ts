@@ -943,6 +943,39 @@ export function useVimInput<
         return;
       }
 
+      if (event.shiftKey && key === "i") {
+        event.preventDefault();
+        const input = inputRef.current;
+
+        if (input) {
+          const cursor = input.selectionStart ?? 0;
+          const lineStart = findLineStart(input.value, cursor);
+          input.setSelectionRange(lineStart, lineStart);
+        }
+
+        setMode("insert");
+        pendingCommandRef.current = null;
+        preferredVisualLeftRef.current = null;
+        return;
+      }
+
+      if (event.shiftKey && key === "a") {
+        event.preventDefault();
+        const input = inputRef.current;
+
+        if (input) {
+          const cursor = input.selectionStart ?? 0;
+          const lineStart = findLineStart(input.value, cursor);
+          const lineEnd = findLineEnd(input.value, lineStart);
+          input.setSelectionRange(lineEnd, lineEnd);
+        }
+
+        setMode("insert");
+        pendingCommandRef.current = null;
+        preferredVisualLeftRef.current = null;
+        return;
+      }
+
       if (key === "i") {
         event.preventDefault();
         setMode("insert");

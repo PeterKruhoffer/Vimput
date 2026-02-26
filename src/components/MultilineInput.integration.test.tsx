@@ -164,6 +164,25 @@ describe("MultilineInput integration", () => {
     expect(screen.getByText("insert")).toBeTruthy();
   });
 
+  it("uses Shift+A/Shift+I to insert at current line boundaries", () => {
+    const textarea = setupMultilineInput();
+    textarea.value = "alpha\nbeta\ngamma";
+    textarea.focus();
+    textarea.setSelectionRange(8, 8);
+
+    fireEvent.keyDown(textarea, { key: "I", shiftKey: true });
+    expect(textarea.selectionStart).toBe(6);
+    expect(screen.getByText("insert")).toBeTruthy();
+
+    fireEvent.keyDown(textarea, { key: "Escape" });
+    expect(screen.getByText("normal")).toBeTruthy();
+
+    textarea.setSelectionRange(8, 8);
+    fireEvent.keyDown(textarea, { key: "A", shiftKey: true });
+    expect(textarea.selectionStart).toBe(10);
+    expect(screen.getByText("insert")).toBeTruthy();
+  });
+
   it("moves the cursor left on escape and keeps i as insert-before-current-char", () => {
     const textarea = setupMultilineInput();
     textarea.value = "line one\nline two";

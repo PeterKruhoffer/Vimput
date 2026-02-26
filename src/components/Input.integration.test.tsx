@@ -132,6 +132,24 @@ describe("Input integration", () => {
     expect(screen.getByText("insert")).toBeTruthy();
   });
 
+  it("uses Shift+A/Shift+I for end/start-of-line insert in normal mode", () => {
+    const input = setupInput();
+    input.value = "alpha beta";
+    input.focus();
+    input.setSelectionRange(3, 3);
+
+    fireEvent.keyDown(input, { key: "A", shiftKey: true });
+    expect(input.selectionStart).toBe(input.value.length);
+    expect(screen.getByText("insert")).toBeTruthy();
+
+    fireEvent.keyDown(input, { key: "Escape" });
+    expect(screen.getByText("normal")).toBeTruthy();
+
+    fireEvent.keyDown(input, { key: "I", shiftKey: true });
+    expect(input.selectionStart).toBe(0);
+    expect(screen.getByText("insert")).toBeTruthy();
+  });
+
   it("moves the cursor left on escape and keeps i as insert-before-current-char", () => {
     const input = setupInput();
     input.value = "alpha";
