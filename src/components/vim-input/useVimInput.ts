@@ -3,12 +3,27 @@ import { useCallback, useRef, useState } from "react";
 import type { VimMode } from "./types";
 
 type TextInputElement = HTMLInputElement | HTMLTextAreaElement;
+type VerticalDirection = "up" | "down";
+type VisualCursorPosition = {
+	top: number;
+	left: number;
+};
+type VisualCursorRow = {
+	start: number;
+	end: number;
+};
+type VisualCursorLayout = {
+	positions: VisualCursorPosition[];
+	rows: VisualCursorRow[];
+	lineHeight: number;
+};
 
 const LEFT_MOTION = new Set(["h"]);
 const RIGHT_MOTION = new Set(["l"]);
 const UP_MOTION = "k";
 const DOWN_MOTION = "j";
 const WORD_CHAR_REGEX = /[A-Za-z0-9_]/;
+const VISUAL_LAYOUT_MAX_LENGTH = 4000;
 
 function clamp(value: number, min: number, max: number) {
 	return Math.min(Math.max(value, min), max);
@@ -158,17 +173,178 @@ function resolvePixelValue(value: string) {
 	return Number.isFinite(parsedValue) ? parsedValue : 0;
 }
 
+export function buildVisualCursorRows(positions: VisualCursorPosition[]) {
+	if (positions.length === 0) {
+		return [] as VisualCursorRow[];
+	}
+
+	const rows: VisualCursorRow[] = [];
+	let rowStart = 0;
+	let rowTop = positions[0]?.top ?? 0;
+
+	for (let index = 1; index < positions.length; index += 1) {
+		const top = positions[index]?.top ?? rowTop;
+		if (top !== rowTop) {
+			rows.push({ start: rowStart, end: index - 1 });
+			rowStart = index;
+			rowTop = top;
+		}
+	}
+
+	rows.push({ start: rowStart, end: positions.length - 1 });
+	return rows;
+}
+
+export function findCursorOnAdjacentVisualRow(
+	positions: VisualCursorPosition[],
+	rows: VisualCursorRow[],
+	cursor: number,
+	direction: VerticalDirection,
+	preferredLeft: number,
+) {
+	if (positions.length === 0 || rows.length === 0) {
+		return cursor;
+	}
+
+	const clampedCursor = clamp(cursor, 0, positions.length - 1);
+	const currentRowIndex = rows.findIndex(
+		(row) => clampedCursor >= row.start && clampedCursor <= row.end,
+	);
+
+	if (currentRowIndex === -1) {
+		return clampedCursor;
+	}
+
+	const targetRowIndex =
+		direction === "up" ? currentRowIndex - 1 : currentRowIndex + 1;
+
+	if (targetRowIndex < 0 || targetRowIndex >= rows.length) {
+		return clampedCursor;
+	}
+
+	const targetRow = rows[targetRowIndex];
+	if (!targetRow) {
+		return clampedCursor;
+	}
+
+	let bestCursor = targetRow.start;
+	let bestDistance = Math.abs(
+		(positions[bestCursor]?.left ?? 0) - preferredLeft,
+	);
+
+	for (let index = targetRow.start + 1; index <= targetRow.end; index += 1) {
+		const distance = Math.abs((positions[index]?.left ?? 0) - preferredLeft);
+
+		if (
+			distance < bestDistance ||
+			(distance === bestDistance && index > bestCursor)
+		) {
+			bestCursor = index;
+			bestDistance = distance;
+		}
+	}
+
+	return bestCursor;
+}
+
+function measureTextAreaVisualLayout(
+	input: HTMLTextAreaElement,
+): VisualCursorLayout | null {
+	if (
+		typeof document === "undefined" ||
+		!document.body ||
+		input.value.length > VISUAL_LAYOUT_MAX_LENGTH ||
+		input.clientWidth <= 0
+	) {
+		return null;
+	}
+
+	const computedStyle = window.getComputedStyle(input);
+	const mirror = document.createElement("div");
+	mirror.setAttribute("aria-hidden", "true");
+	mirror.style.position = "absolute";
+	mirror.style.left = "-99999px";
+	mirror.style.top = "0";
+	mirror.style.visibility = "hidden";
+	mirror.style.pointerEvents = "none";
+	mirror.style.whiteSpace = "pre-wrap";
+	mirror.style.overflowWrap = "break-word";
+	mirror.style.wordBreak = computedStyle.wordBreak;
+	mirror.style.lineHeight = computedStyle.lineHeight;
+	mirror.style.font = computedStyle.font;
+	mirror.style.letterSpacing = computedStyle.letterSpacing;
+	mirror.style.textTransform = computedStyle.textTransform;
+	mirror.style.textIndent = computedStyle.textIndent;
+	mirror.style.tabSize = computedStyle.tabSize;
+	mirror.style.paddingTop = computedStyle.paddingTop;
+	mirror.style.paddingRight = computedStyle.paddingRight;
+	mirror.style.paddingBottom = computedStyle.paddingBottom;
+	mirror.style.paddingLeft = computedStyle.paddingLeft;
+	mirror.style.border = "0";
+	mirror.style.boxSizing = "border-box";
+	mirror.style.width = `${input.clientWidth}px`;
+
+	const fragment = document.createDocumentFragment();
+	const markers: HTMLSpanElement[] = [];
+	const value = input.value;
+
+	for (let index = 0; index <= value.length; index += 1) {
+		const marker = document.createElement("span");
+		marker.textContent = "\u200b";
+		marker.style.display = "inline";
+		marker.style.padding = "0";
+		marker.style.margin = "0";
+		marker.style.border = "0";
+
+		markers.push(marker);
+		fragment.append(marker);
+
+		if (index < value.length) {
+			fragment.append(document.createTextNode(value[index] ?? ""));
+		}
+	}
+
+	mirror.append(fragment);
+	document.body.append(mirror);
+
+	try {
+		const positions = markers.map((marker) => ({
+			top: marker.offsetTop,
+			left: marker.offsetLeft,
+		}));
+		const rows = buildVisualCursorRows(positions);
+		const hasLogicalMultiline = value.includes("\n");
+		const hasVisualOverflow = input.scrollHeight - input.clientHeight > 1;
+
+		if (rows.length <= 1 && (hasLogicalMultiline || hasVisualOverflow)) {
+			return null;
+		}
+
+		return {
+			positions,
+			rows,
+			lineHeight: resolveLineHeight(input),
+		};
+	} finally {
+		mirror.remove();
+	}
+}
+
 function keepTextAreaCursorVisible(
 	input: HTMLTextAreaElement,
 	cursor: number,
-	direction: "up" | "down",
+	direction: VerticalDirection,
 	hasMoved: boolean,
+	metrics?: {
+		lineTop: number;
+		lineHeight: number;
+	},
 ) {
 	const computedStyle = window.getComputedStyle(input);
-	const lineHeight = resolveLineHeight(input);
+	const lineHeight = metrics?.lineHeight ?? resolveLineHeight(input);
 	const paddingTop = resolvePixelValue(computedStyle.paddingTop);
 	const lineIndex = countLinesBeforeCursor(input.value, cursor);
-	const lineTop = paddingTop + lineIndex * lineHeight;
+	const lineTop = metrics?.lineTop ?? paddingTop + lineIndex * lineHeight;
 	const lineBottom = lineTop + lineHeight;
 	const visibilityBuffer = lineHeight;
 	const viewportTop = input.scrollTop + visibilityBuffer;
@@ -216,6 +392,7 @@ export function useVimInput<
 	TElement extends TextInputElement = HTMLInputElement,
 >() {
 	const inputRef = useRef<TElement | null>(null);
+	const preferredVisualLeftRef = useRef<number | null>(null);
 	const [mode, setMode] = useState<VimMode>("normal");
 
 	const moveCaretBy = useCallback((delta: number) => {
@@ -229,6 +406,7 @@ export function useVimInput<
 		const nextCursor = clamp(cursor + delta, 0, input.value.length);
 
 		input.setSelectionRange(nextCursor, nextCursor);
+		preferredVisualLeftRef.current = null;
 	}, []);
 
 	const moveToNextWord = useCallback(() => {
@@ -242,6 +420,7 @@ export function useVimInput<
 		const nextCursor = findNextWordStart(input.value, cursor);
 
 		input.setSelectionRange(nextCursor, nextCursor);
+		preferredVisualLeftRef.current = null;
 	}, []);
 
 	const moveToPreviousWord = useCallback(() => {
@@ -255,6 +434,7 @@ export function useVimInput<
 		const previousCursor = findPreviousWordStart(input.value, cursor);
 
 		input.setSelectionRange(previousCursor, previousCursor);
+		preferredVisualLeftRef.current = null;
 	}, []);
 
 	const moveToWordEnd = useCallback(() => {
@@ -268,9 +448,10 @@ export function useVimInput<
 		const wordEndCursor = findWordEndForward(input.value, cursor);
 
 		input.setSelectionRange(wordEndCursor, wordEndCursor);
+		preferredVisualLeftRef.current = null;
 	}, []);
 
-	const moveCaretVertically = useCallback((direction: "up" | "down") => {
+	const moveCaretVertically = useCallback((direction: VerticalDirection) => {
 		const input = inputRef.current;
 
 		if (!input || !isTextArea(input)) {
@@ -278,16 +459,54 @@ export function useVimInput<
 		}
 
 		const cursor = input.selectionStart ?? 0;
-		const nextCursor =
-			direction === "up"
-				? findPreviousLineCursor(input.value, cursor)
-				: findNextLineCursor(input.value, cursor);
+		const visualLayout = measureTextAreaVisualLayout(input);
+		let nextCursor = cursor;
+		let visibilityMetrics: { lineTop: number; lineHeight: number } | undefined;
+
+		if (visualLayout && visualLayout.positions.length > 0) {
+			const currentPosition = visualLayout.positions[cursor];
+
+			if (currentPosition) {
+				const preferredLeft =
+					preferredVisualLeftRef.current ?? currentPosition.left;
+				nextCursor = findCursorOnAdjacentVisualRow(
+					visualLayout.positions,
+					visualLayout.rows,
+					cursor,
+					direction,
+					preferredLeft,
+				);
+
+				const nextPosition = visualLayout.positions[nextCursor];
+				if (nextPosition) {
+					visibilityMetrics = {
+						lineTop: nextPosition.top,
+						lineHeight: visualLayout.lineHeight,
+					};
+				}
+
+				preferredVisualLeftRef.current = preferredLeft;
+			}
+		} else {
+			nextCursor =
+				direction === "up"
+					? findPreviousLineCursor(input.value, cursor)
+					: findNextLineCursor(input.value, cursor);
+			preferredVisualLeftRef.current = null;
+		}
+
 		const hasLogicalMultiline = input.value.includes("\n");
 		const hasMoved = nextCursor !== cursor;
 
 		input.setSelectionRange(nextCursor, nextCursor);
 		if (hasMoved || hasLogicalMultiline) {
-			keepTextAreaCursorVisible(input, nextCursor, direction, hasMoved);
+			keepTextAreaCursorVisible(
+				input,
+				nextCursor,
+				direction,
+				hasMoved,
+				visibilityMetrics,
+			);
 		}
 	}, []);
 
@@ -307,6 +526,7 @@ export function useVimInput<
 				if (key === "escape") {
 					event.preventDefault();
 					setMode("normal");
+					preferredVisualLeftRef.current = null;
 				}
 
 				return;
@@ -315,6 +535,7 @@ export function useVimInput<
 			if (key === "i") {
 				event.preventDefault();
 				setMode("insert");
+				preferredVisualLeftRef.current = null;
 				return;
 			}
 
@@ -379,6 +600,7 @@ export function useVimInput<
 
 			if (key.length === 1 || key === "backspace" || key === "delete") {
 				event.preventDefault();
+				preferredVisualLeftRef.current = null;
 			}
 		},
 		[
