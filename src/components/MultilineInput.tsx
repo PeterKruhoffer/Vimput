@@ -22,7 +22,9 @@ export function MultilineInput() {
           aria-label="Vim motion multiline input"
         />
       </div>
-      <ModeHint mode={mode} />
+      <div className="h-24 w-full overflow-y-auto">
+        <ModeHint mode={mode} />
+      </div>
     </div>
   );
 }

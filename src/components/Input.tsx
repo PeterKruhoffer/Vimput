@@ -20,7 +20,9 @@ export function Input() {
           aria-label="Vim motion input"
         />
       </div>
-      <ModeHint mode={mode} />
+      <div className="h-24 w-full overflow-y-auto">
+        <ModeHint mode={mode} />
+      </div>
     </div>
   );
 }
