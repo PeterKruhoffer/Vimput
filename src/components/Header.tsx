@@ -57,10 +57,6 @@ export default function Header() {
             <Home size={20} />
             <span className="font-medium">Home</span>
           </Link>
-
-          {/* Demo Links Start */}
-
-          {/* Demo Links End */}
         </nav>
       </aside>
     </>
