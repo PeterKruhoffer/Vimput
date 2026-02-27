@@ -7,7 +7,12 @@ export const Route = createFileRoute("/")({ component: App });
 function App() {
   return (
     <main className="min-h-screen w-full bg-linear-to-b from-zinc-900 via-zinc-800 to-zinc-900 px-6 py-8 md:px-10">
-      <h1 className="text-center text-3xl text-zinc-50">Vimput!</h1>
+      <div className="grid place-items-center gap-y-4">
+        <h1 className="text-center text-4xl text-zinc-50">Vimput!</h1>
+        <p className="text-zinc-100 text-center">
+          Because muscle memory is hard to ignore
+        </p>
+      </div>
       <div className="mx-auto grid min-h-[calc(100vh-4rem)] w-full max-w-7xl content-center gap-8">
         <section className="grid w-full gap-y-20 place-items-center">
           <div className="w-full max-w-2xl">
