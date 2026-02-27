@@ -792,6 +792,44 @@ export function useVimInput<
     preferredVisualLeftRef.current = null;
   }, []);
 
+  const deleteVisualLineSelection = useCallback(() => {
+    const input = inputRef.current;
+
+    if (!input || input.value.length === 0) {
+      return;
+    }
+
+    const currentSelection = resolveSelectionEdges(
+      input,
+      visualSelectionRef.current,
+    );
+    const selectedStart = Math.min(
+      currentSelection.anchor,
+      currentSelection.active,
+    );
+    const selectedEnd = Math.max(
+      currentSelection.anchor,
+      currentSelection.active,
+    );
+    const endReferenceCursor =
+      selectedEnd > selectedStart ? selectedEnd - 1 : selectedStart;
+    let deletionStart = findLineStart(input.value, selectedStart);
+    const endLineStart = findLineStart(input.value, endReferenceCursor);
+    let deletionEnd = findLineEnd(input.value, endLineStart);
+
+    if (deletionEnd < input.value.length) {
+      deletionEnd += 1;
+    } else if (deletionStart > 0) {
+      deletionStart -= 1;
+    }
+
+    applyDeletion(deletionStart, deletionEnd);
+    setMode("normal");
+    visualSelectionRef.current = null;
+    pendingCommandRef.current = null;
+    preferredVisualLeftRef.current = null;
+  }, [applyDeletion]);
+
   const exitVisualLineMode = useCallback(() => {
     const input = inputRef.current;
     const currentSelection = input
@@ -868,6 +906,12 @@ export function useVimInput<
         if (event.shiftKey && key === UP_MOTION) {
           event.preventDefault();
           moveVisualLinesBy("up");
+          return;
+        }
+
+        if (key === "d") {
+          event.preventDefault();
+          deleteVisualLineSelection();
           return;
         }
 
@@ -1075,6 +1119,7 @@ export function useVimInput<
       moveToNextWord,
       moveToPreviousWord,
       moveToWordEnd,
+      deleteVisualLineSelection,
       moveVisualLinesBy,
       moveVisualSelectionBy,
     ],

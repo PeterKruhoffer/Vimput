@@ -188,6 +188,21 @@ describe("Input integration", () => {
     expect(input.selectionEnd).toBe(10);
   });
 
+  it("deletes the highlighted line with d in visual line mode", () => {
+    const input = setupInput();
+    input.value = "alpha beta";
+    input.focus();
+    input.setSelectionRange(4, 4);
+
+    fireEvent.keyDown(input, { key: "V", shiftKey: true });
+    fireEvent.keyDown(input, { key: "d" });
+
+    expect(input.value).toBe("");
+    expect(input.selectionStart).toBe(0);
+    expect(input.selectionEnd).toBe(0);
+    expect(screen.getByText("normal")).toBeTruthy();
+  });
+
   it("keeps Ctrl/Cmd shortcuts available in normal mode", () => {
     const input = setupInput();
     input.value = "seed value";

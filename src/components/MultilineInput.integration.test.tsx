@@ -250,4 +250,19 @@ describe("MultilineInput integration", () => {
     expect(textarea.selectionEnd).toBe(10);
     expect(screen.getByText("visual line")).toBeTruthy();
   });
+
+  it("deletes the highlighted line with d in visual line mode", () => {
+    const textarea = setupMultilineInput();
+    textarea.value = "alpha\nbeta\ngamma";
+    textarea.focus();
+    textarea.setSelectionRange(7, 7);
+
+    fireEvent.keyDown(textarea, { key: "V", shiftKey: true });
+    fireEvent.keyDown(textarea, { key: "d" });
+
+    expect(textarea.value).toBe("alpha\ngamma");
+    expect(textarea.selectionStart).toBe(6);
+    expect(textarea.selectionEnd).toBe(6);
+    expect(screen.getByText("normal")).toBeTruthy();
+  });
 });
