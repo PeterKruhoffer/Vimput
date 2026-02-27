@@ -1,6 +1,9 @@
 # Vimput
 Because muscle memory is hard to ignore
 
+
+This does not implement all vim motions, but mainly the ones i use the most
+
 # Getting Started
 
 To run this application:
