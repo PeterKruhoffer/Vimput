@@ -10,14 +10,14 @@ function App() {
       <h1 className="text-center text-3xl text-zinc-50">Vimput!</h1>
       <div className="mx-auto grid min-h-[calc(100vh-4rem)] w-full max-w-7xl content-center gap-8">
         <section className="grid w-full gap-y-20 place-items-center">
-          <div>
+          <div className="w-full max-w-2xl">
             <h2 className="font-semibold uppercase tracking-[0.2em] text-zinc-200">
               Single Line
             </h2>
             <Input />
           </div>
 
-          <div>
+          <div className="w-full max-w-2xl">
             <h2 className="font-semibold uppercase tracking-[0.2em] text-zinc-200">
               Multiline
             </h2>
