@@ -1,6 +1,7 @@
 {
   "name": "vimput",
   "private": true,
+  "packageManager": "pnpm@8.15.9",
   "type": "module",
   "imports": {
     "#/*": "./src/*"
